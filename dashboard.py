@@ -5,6 +5,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 import threading
 import time
+from website_classifier import WebsiteClassifier
 
 class NetworkAnalyzerDashboard:
     def __init__(self, root, dns_sniffer, network_monitor):
@@ -61,14 +62,19 @@ class NetworkAnalyzerDashboard:
         # Productivity tab
         self.productivity_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.productivity_frame, text="Productivity Analysis")
-        
+
+        # ML Training tab
+        self.ml_frame = ttk.Frame(self.notebook)
+        self.notebook.add(self.ml_frame, text="ML Training")
+
         # Network tab
         self.network_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.network_frame, text="Network Usage")
-        
+
         # Setup each tab
         self.setup_dashboard_tab()
         self.setup_productivity_tab()
+        self.setup_ml_tab()
         self.setup_network_tab()
         
     def setup_dashboard_tab(self):
@@ -165,7 +171,65 @@ class NetworkAnalyzerDashboard:
         
         self.analysis_text.grid(row=0, column=0, sticky="nsew")
         scrollbar.grid(row=0, column=1, sticky="ns")
-        
+
+    def setup_ml_tab(self):
+        """Setup ML training tab"""
+        # Main frame
+        main_frame = ttk.Frame(self.ml_frame)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Configure grid
+        main_frame.columnconfigure(0, weight=1)
+        main_frame.rowconfigure(0, weight=0)  # Controls frame
+        main_frame.rowconfigure(1, weight=1)  # Content frame
+
+        # Controls frame - TOP
+        controls_frame = ttk.LabelFrame(main_frame, text="ML Training Controls")
+        controls_frame.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
+
+        # Controls grid
+        controls_grid = ttk.Frame(controls_frame)
+        controls_grid.pack(fill=tk.X, padx=10, pady=10)
+
+        # Domain input
+        ttk.Label(controls_grid, text="Domain:", font=('Arial', 10, 'bold')).grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        self.domain_entry = ttk.Entry(controls_grid, width=30)
+        self.domain_entry.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
+
+        # Category selection
+        ttk.Label(controls_grid, text="Category:", font=('Arial', 10, 'bold')).grid(row=0, column=2, padx=5, pady=5, sticky=tk.W)
+        self.category_var = tk.StringVar(value='neutral')
+        category_combo = ttk.Combobox(controls_grid, textvariable=self.category_var,
+                                    values=['productive', 'unproductive', 'neutral'], state='readonly', width=15)
+        category_combo.grid(row=0, column=3, padx=5, pady=5, sticky=tk.W)
+
+        # Buttons
+        self.add_label_btn = ttk.Button(controls_grid, text="Add Label", command=self.add_user_label)
+        self.add_label_btn.grid(row=0, column=4, padx=5, pady=5)
+
+        self.train_btn = ttk.Button(controls_grid, text="Train Model", command=self.train_ml_model)
+        self.train_btn.grid(row=0, column=5, padx=5, pady=5)
+
+        self.retrain_btn = ttk.Button(controls_grid, text="Retrain Model", command=self.retrain_model)
+        self.retrain_btn.grid(row=0, column=6, padx=5, pady=5)
+
+        # Content frame - BOTTOM (expands)
+        content_frame = ttk.Frame(main_frame)
+        content_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
+        content_frame.columnconfigure(0, weight=1)
+        content_frame.rowconfigure(0, weight=1)
+
+        # Text widget for ML stats and training data
+        self.ml_text = tk.Text(content_frame, height=20, width=100, wrap=tk.WORD, font=('Consolas', 9))
+        scrollbar = ttk.Scrollbar(content_frame, orient=tk.VERTICAL, command=self.ml_text.yview)
+        self.ml_text.configure(yscrollcommand=scrollbar.set)
+
+        self.ml_text.grid(row=0, column=0, sticky="nsew")
+        scrollbar.grid(row=0, column=1, sticky="ns")
+
+        # Initial ML stats display
+        self.update_ml_stats()
+
     def setup_network_tab(self):
         """Setup network usage tab"""
         # Main frame
@@ -493,5 +557,107 @@ class NetworkAnalyzerDashboard:
                                bbox=dict(boxstyle="round,pad=0.3", facecolor="lightgray"))
             self.network_ax.set_xticks([])
             self.network_ax.set_yticks([])
-        
+
         self.network_canvas.draw()
+
+    def add_user_label(self):
+        """Add a user-provided label for a domain"""
+        domain = self.domain_entry.get().strip()
+        category = self.category_var.get()
+
+        if not domain:
+            messagebox.showerror("Error", "Please enter a domain name.")
+            return
+
+        try:
+            # Add the label to the classifier
+            self.dns_sniffer.classifier.add_user_label(domain, category)
+            messagebox.showinfo("Success", f"Added label for {domain}: {category}")
+            self.domain_entry.delete(0, tk.END)
+            self.update_ml_stats()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to add label: {e}")
+
+    def train_ml_model(self):
+        """Train the ML model with current data"""
+        try:
+            self.train_btn.config(state=tk.DISABLED, text="Training...")
+            self.root.update()
+
+            # Train the model
+            result = self.dns_sniffer.classifier.train_model()
+
+            self.train_btn.config(state=tk.NORMAL, text="Train Model")
+            messagebox.showinfo("Success", f"Model trained successfully!\n\n{result}")
+            self.update_ml_stats()
+        except Exception as e:
+            self.train_btn.config(state=tk.NORMAL, text="Train Model")
+            messagebox.showerror("Error", f"Training failed: {e}")
+
+    def retrain_model(self):
+        """Retrain the model from scratch"""
+        try:
+            self.retrain_btn.config(state=tk.DISABLED, text="Retraining...")
+            self.root.update()
+
+            # Retrain the model
+            result = self.dns_sniffer.classifier.retrain_model()
+
+            self.retrain_btn.config(state=tk.NORMAL, text="Retrain Model")
+            messagebox.showinfo("Success", f"Model retrained successfully!\n\n{result}")
+            self.update_ml_stats()
+        except Exception as e:
+            self.retrain_btn.config(state=tk.NORMAL, text="Retrain Model")
+            messagebox.showerror("Error", f"Retraining failed: {e}")
+
+    def update_ml_stats(self):
+        """Update the ML statistics display"""
+        try:
+            self.ml_text.delete(1.0, tk.END)
+
+            # Get ML statistics
+            stats = self.dns_sniffer.classifier.get_ml_stats()
+
+            ml_info = f"""🤖 Machine Learning Statistics
+{'=' * 40}
+
+📊 Model Performance:
+• Accuracy: {stats.get('accuracy', 'N/A'):.1f}%
+• Precision: {stats.get('precision', 'N/A'):.1f}%
+• Recall: {stats.get('recall', 'N/A'):.1f}%
+• F1-Score: {stats.get('f1_score', 'N/A'):.1f}%
+
+📈 Training Data:
+• Total Samples: {stats.get('total_samples', 0)}
+• Productive: {stats.get('productive_count', 0)}
+• Unproductive: {stats.get('unproductive_count', 0)}
+• Neutral: {stats.get('neutral_count', 0)}
+
+🔧 Model Details:
+• Algorithm: {stats.get('algorithm', 'N/A')}
+• Last Trained: {stats.get('last_trained', 'Never')}
+• Features Used: {stats.get('features_count', 0)}
+
+💡 User Labels Added: {stats.get('user_labels_count', 0)}
+
+📝 Recent User Labels:
+"""
+
+            # Add recent user labels
+            user_labels = stats.get('recent_user_labels', [])
+            if user_labels:
+                for label in user_labels[-10:]:  # Show last 10
+                    ml_info += f"• {label['domain']} → {label['category']}\n"
+            else:
+                ml_info += "• No user labels added yet\n"
+
+            ml_info += "\n💭 Tips:\n"
+            ml_info += "• Add more labels to improve accuracy\n"
+            ml_info += "• Train the model after adding labels\n"
+            ml_info += "• Retrain periodically for better performance\n"
+
+            self.ml_text.insert(tk.END, ml_info)
+
+        except Exception as e:
+            self.ml_text.delete(1.0, tk.END)
+            self.ml_text.insert(tk.END, f"Error loading ML stats: {e}")
