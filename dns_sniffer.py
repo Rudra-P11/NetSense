@@ -7,10 +7,13 @@ from collections import defaultdict, deque
 import threading
 from typing import Dict, Set
 import socket
+from anomaly_detector import AnomalyDetector
+
 
 class DNSSniffer:
     def __init__(self, classifier):
         self.classifier = classifier
+        self.anomaly_detector = AnomalyDetector()
         self.domain_activity = defaultdict(lambda: {'first_seen': 0, 'last_seen': 0, 'packet_count': 0})
         self.active_domains = set()
         self.domain_times = defaultdict(float)
@@ -18,8 +21,10 @@ class DNSSniffer:
         self.is_sniffing = False
         self.sniffer_thread = None
         self.recent_packets = deque(maxlen=1000)
+        self.anomaly_alerts = deque(maxlen=100)
         self.dns_responses = {}  # Track DNS responses to map IPs to domains
         self.ssl_hostnames = {}  # Track SSL hostnames
+
         
     def start_sniffing(self):
         """Start packet sniffing in a separate thread"""
@@ -282,22 +287,41 @@ class DNSSniffer:
                 'dst_ip': dst_ip,
                 'protocol': protocol
             })
-            
+
+            # Anomaly detection
+            packet_info = {
+                'timestamp': current_time,
+                'protocol': protocol,
+                'category': self.classifier.classify_website(domain)[0]  # Get category
+            }
+            is_anomaly, score, message = self.anomaly_detector.detect_anomaly(domain, packet_info, self.domain_activity[domain])
+            if is_anomaly:
+                alert = {
+                    'timestamp': current_time,
+                    'domain': domain,
+                    'anomaly_score': score,
+                    'alert_message': message,
+                    'packet_info': packet_info
+                }
+                self.anomaly_alerts.append(alert)
+                print(f"ANOMALY DETECTED: {domain} - {message}")
+
             # Print for debugging
             print(f"Captured: {domain} via {protocol}")
+
     
     def get_domain_statistics(self) -> Dict:
         """Get statistics about captured domains"""
         with self.lock:
             current_time = time.time()
-            
+
             # Calculate time for currently active domains
             for domain in list(self.active_domains):
                 session_start = self.domain_activity[domain].get('session_start', current_time)
                 additional_time = current_time - session_start
                 self.domain_times[domain] += additional_time
                 self.domain_activity[domain]['session_start'] = current_time
-            
+
             # Filter out domains with very little time and clean them
             domain_data = {}
             for domain, time_spent in self.domain_times.items():
@@ -305,19 +329,40 @@ class DNSSniffer:
                     clean_domain = self._clean_domain(domain)
                     if clean_domain and self._is_actual_domain(clean_domain):
                         domain_data[clean_domain] = time_spent
-            
+
             return {
                 'domain_times': domain_data,
                 'total_domains': len(domain_data),
                 'total_packets': sum(activity['packet_count'] for activity in self.domain_activity.values()),
-                'recent_activity': list(self.recent_packets)[-15:]  # Last 15 activities
+                'recent_activity': list(self.recent_packets)[-15:],  # Last 15 activities
+                'anomaly_stats': self.get_anomaly_stats()
             }
+
     
     def get_productivity_analysis(self):
         """Get productivity analysis based on domain times"""
         stats = self.get_domain_statistics()
         return self.classifier.get_productivity_analysis(stats['domain_times'])
     
+    def get_anomaly_stats(self) -> Dict:
+        """Get anomaly detection statistics"""
+        detector_stats = self.anomaly_detector.get_anomaly_stats()
+        # Override with our own alerts since we store them here
+        detector_stats['total_alerts'] = len(self.anomaly_alerts)
+        detector_stats['recent_alerts'] = list(self.anomaly_alerts)[-10:]  # Last 10 alerts
+        # Calculate alerts_per_hour from our alerts
+        if len(self.anomaly_alerts) > 1:
+            time_span = self.anomaly_alerts[-1]['timestamp'] - self.anomaly_alerts[0]['timestamp']
+            detector_stats['alerts_per_hour'] = (len(self.anomaly_alerts) / time_span) * 3600 if time_span > 0 else 0
+        else:
+            detector_stats['alerts_per_hour'] = 0
+        return detector_stats
+
+
+    def update_anomaly_baseline(self) -> bool:
+        """Update the anomaly detection baseline"""
+        return self.anomaly_detector.update_baseline()
+
     def clear_statistics(self):
         """Clear all collected statistics"""
         with self.lock:
@@ -325,4 +370,6 @@ class DNSSniffer:
             self.active_domains.clear()
             self.domain_times.clear()
             self.recent_packets.clear()
+            self.anomaly_alerts.clear()
             self.dns_responses.clear()
+            self.anomaly_detector.clear_data()

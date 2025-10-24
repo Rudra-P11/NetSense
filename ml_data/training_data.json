@@ -5,5 +5,61 @@
     "confidence": 1.0,
     "timestamp": 1761067907.0656505,
     "context": {}
+  },
+  {
+    "domain": "youtube.com",
+    "category": "productive",
+    "confidence": 1.0,
+    "timestamp": 1761079691.1484478,
+    "context": {}
+  },
+  {
+    "domain": "netflix.com",
+    "category": "unproductive",
+    "confidence": 1.0,
+    "timestamp": 1761079706.7184904,
+    "context": {}
+  },
+  {
+    "domain": "hotstar.com",
+    "category": "unproductive",
+    "confidence": 1.0,
+    "timestamp": 1761079717.3352783,
+    "context": {}
+  },
+  {
+    "domain": "maang.in",
+    "category": "productive",
+    "confidence": 1.0,
+    "timestamp": 1761079754.0248034,
+    "context": {}
+  },
+  {
+    "domain": "www.geeksforgeeks.org",
+    "category": "productive",
+    "confidence": 1.0,
+    "timestamp": 1761326676.7122693,
+    "context": {}
+  },
+  {
+    "domain": "geeksforgeeks.org",
+    "category": "productive",
+    "confidence": 1.0,
+    "timestamp": 1761327861.7699287,
+    "context": {}
+  },
+  {
+    "domain": "videos.geeksforgeeks.org",
+    "category": "productive",
+    "confidence": 1.0,
+    "timestamp": 1761327813.3542342,
+    "context": {}
+  },
+  {
+    "domain": "classroom.google.com",
+    "category": "productive",
+    "confidence": 1.0,
+    "timestamp": 1761329206.7138698,
+    "context": {}
   }
 ]

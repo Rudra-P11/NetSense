@@ -71,11 +71,16 @@ class NetworkAnalyzerDashboard:
         self.network_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.network_frame, text="Network Usage")
 
+        # Anomaly tab
+        self.anomaly_frame = ttk.Frame(self.notebook)
+        self.notebook.add(self.anomaly_frame, text="Anomaly Detection")
+
         # Setup each tab
         self.setup_dashboard_tab()
         self.setup_productivity_tab()
         self.setup_ml_tab()
         self.setup_network_tab()
+        self.setup_anomaly_tab()
         
     def setup_dashboard_tab(self):
         """Setup dashboard tab with better layout"""
@@ -388,7 +393,8 @@ class NetworkAnalyzerDashboard:
                     protocol = activity.get('protocol', 'Unknown')
                     
                     # Color code based on domain type
-                    category, _ = self.dns_sniffer.classifier.classify_website(domain)
+                    category, _ = self.dns_sniffer.classifier.classify_website_ml(domain)
+
                     if category == 'productive':
                         color_tag = 'productive'
                     elif category == 'unproductive':
@@ -412,9 +418,13 @@ class NetworkAnalyzerDashboard:
             
             # Update analysis text
             self._update_analysis_text(productivity_analysis)
-            
+
             # Update network usage
             self._update_network_chart(network_stats)
+
+            # Update anomaly stats
+            self.update_anomaly_stats()
+
             
             # Update speed labels
             upload_speed = network_stats['upload_speed']
@@ -483,7 +493,8 @@ class NetworkAnalyzerDashboard:
         analysis_text = f"""📊 Overall Productivity Analysis
 {'=' * 40}
 
-⏱️  Total Tracking Time: {total_time/60:.1f} minutes
+⏱️  Total Tracking Time: {int(total_time // 60)}:{int(total_time % 60):02d} (HH:MM)
+
 🎯 Productivity Score: {productivity_score:.1f}%
 
 📈 Time Distribution:
@@ -588,11 +599,17 @@ class NetworkAnalyzerDashboard:
             result = self.dns_sniffer.classifier.train_model()
 
             self.train_btn.config(state=tk.NORMAL, text="Train Model")
-            messagebox.showinfo("Success", f"Model trained successfully!\n\n{result}")
+
+            if "successfully" in result:
+                messagebox.showinfo("Success", f"Model trained successfully!\n\n{result}")
+            else:
+                messagebox.showerror("Error", f"Training failed!\n\n{result}")
+
             self.update_ml_stats()
         except Exception as e:
             self.train_btn.config(state=tk.NORMAL, text="Train Model")
             messagebox.showerror("Error", f"Training failed: {e}")
+
 
     def retrain_model(self):
         """Retrain the model from scratch"""
@@ -604,11 +621,17 @@ class NetworkAnalyzerDashboard:
             result = self.dns_sniffer.classifier.retrain_model()
 
             self.retrain_btn.config(state=tk.NORMAL, text="Retrain Model")
-            messagebox.showinfo("Success", f"Model retrained successfully!\n\n{result}")
+
+            if result:
+                messagebox.showinfo("Success", "Model retrained successfully!")
+            else:
+                messagebox.showerror("Error", "Retraining failed - insufficient data or error occurred.")
+
             self.update_ml_stats()
         except Exception as e:
             self.retrain_btn.config(state=tk.NORMAL, text="Retrain Model")
             messagebox.showerror("Error", f"Retraining failed: {e}")
+
 
     def update_ml_stats(self):
         """Update the ML statistics display"""
@@ -618,14 +641,27 @@ class NetworkAnalyzerDashboard:
             # Get ML statistics
             stats = self.dns_sniffer.classifier.get_ml_stats()
 
+            # Format metrics safely
+            accuracy = stats.get('accuracy', 'N/A')
+            precision = stats.get('precision', 'N/A')
+            recall = stats.get('recall', 'N/A')
+            f1_score = stats.get('f1_score', 'N/A')
+
+            accuracy_str = accuracy if isinstance(accuracy, str) else f"{accuracy:.1f}"
+            precision_str = precision if isinstance(precision, str) else f"{precision:.1f}"
+            recall_str = recall if isinstance(recall, str) else f"{recall:.1f}"
+            f1_str = f1_score if isinstance(f1_score, str) else f"{f1_score:.1f}"
+
             ml_info = f"""🤖 Machine Learning Statistics
 {'=' * 40}
 
 📊 Model Performance:
-• Accuracy: {stats.get('accuracy', 'N/A'):.1f}%
-• Precision: {stats.get('precision', 'N/A'):.1f}%
-• Recall: {stats.get('recall', 'N/A'):.1f}%
-• F1-Score: {stats.get('f1_score', 'N/A'):.1f}%
+• Accuracy: {accuracy_str}%
+• Precision: {precision_str}%
+• Recall: {recall_str}%
+• F1-Score: {f1_str}%
+
+
 
 📈 Training Data:
 • Total Samples: {stats.get('total_samples', 0)}
@@ -661,3 +697,157 @@ class NetworkAnalyzerDashboard:
         except Exception as e:
             self.ml_text.delete(1.0, tk.END)
             self.ml_text.insert(tk.END, f"Error loading ML stats: {e}")
+
+    def setup_anomaly_tab(self):
+        """Setup anomaly detection tab"""
+        # Main frame
+        main_frame = ttk.Frame(self.anomaly_frame)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Configure grid
+        main_frame.columnconfigure(0, weight=1)
+        main_frame.rowconfigure(0, weight=0)  # Stats frame
+        main_frame.rowconfigure(1, weight=1)  # Alerts frame
+        main_frame.rowconfigure(2, weight=0)  # Controls frame
+
+        # Anomaly statistics frame - TOP
+        stats_frame = ttk.LabelFrame(main_frame, text="Anomaly Detection Statistics")
+        stats_frame.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
+
+        # Stats grid
+        stats_grid = ttk.Frame(stats_frame)
+        stats_grid.pack(fill=tk.X, padx=10, pady=10)
+
+        # Statistics labels
+        self.anomaly_total_alerts_label = ttk.Label(stats_grid, text="Total Alerts: 0", font=('Arial', 10))
+        self.anomaly_total_alerts_label.grid(row=0, column=0, padx=20, pady=5, sticky=tk.W)
+
+        self.anomaly_alerts_per_hour_label = ttk.Label(stats_grid, text="Alerts/Hour: 0", font=('Arial', 10))
+        self.anomaly_alerts_per_hour_label.grid(row=0, column=1, padx=20, pady=5, sticky=tk.W)
+
+        self.anomaly_training_status_label = ttk.Label(stats_grid, text="Training Status: Not Trained", font=('Arial', 10))
+        self.anomaly_training_status_label.grid(row=0, column=2, padx=20, pady=5, sticky=tk.W)
+
+        self.anomaly_baseline_samples_label = ttk.Label(stats_grid, text="Baseline Samples: 0", font=('Arial', 10))
+        self.anomaly_baseline_samples_label.grid(row=0, column=3, padx=20, pady=5, sticky=tk.W)
+
+        # Recent alerts frame - MIDDLE (expands)
+        alerts_frame = ttk.LabelFrame(main_frame, text="Recent Anomaly Alerts")
+        alerts_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
+        alerts_frame.columnconfigure(0, weight=1)
+        alerts_frame.rowconfigure(0, weight=1)
+
+        # Text widget for alerts
+        self.anomaly_text = tk.Text(alerts_frame, height=15, width=100, wrap=tk.WORD, font=('Consolas', 9))
+        scrollbar = ttk.Scrollbar(alerts_frame, orient=tk.VERTICAL, command=self.anomaly_text.yview)
+        self.anomaly_text.configure(yscrollcommand=scrollbar.set)
+
+        self.anomaly_text.grid(row=0, column=0, sticky="nsew")
+        scrollbar.grid(row=0, column=1, sticky="ns")
+
+        # Controls frame - BOTTOM
+        controls_frame = ttk.LabelFrame(main_frame, text="Anomaly Detection Controls")
+        controls_frame.grid(row=2, column=0, sticky="ew", padx=5, pady=5)
+
+        # Controls grid
+        controls_grid = ttk.Frame(controls_frame)
+        controls_grid.pack(fill=tk.X, padx=10, pady=10)
+
+        # Buttons
+        self.update_baseline_btn = ttk.Button(controls_grid, text="Update Baseline", command=self.update_anomaly_baseline)
+        self.update_baseline_btn.grid(row=0, column=0, padx=5, pady=5)
+
+        self.clear_anomaly_btn = ttk.Button(controls_grid, text="Clear Anomaly Data", command=self.clear_anomaly_data)
+        self.clear_anomaly_btn.grid(row=0, column=1, padx=5, pady=5)
+
+        # Initial anomaly stats display
+        self.update_anomaly_stats()
+
+    def update_anomaly_baseline(self):
+        """Update the anomaly detection baseline"""
+        try:
+            self.update_baseline_btn.config(state=tk.DISABLED, text="Updating...")
+            self.root.update()
+
+            # Update baseline
+            success = self.dns_sniffer.update_anomaly_baseline()
+
+            self.update_baseline_btn.config(state=tk.NORMAL, text="Update Baseline")
+
+            if success:
+                messagebox.showinfo("Success", "Anomaly detection baseline updated successfully!")
+                self.update_anomaly_stats()
+            else:
+                messagebox.showerror("Error", "Failed to update anomaly baseline.")
+
+        except Exception as e:
+            self.update_baseline_btn.config(state=tk.NORMAL, text="Update Baseline")
+            messagebox.showerror("Error", f"Failed to update baseline: {e}")
+
+    def clear_anomaly_data(self):
+        """Clear anomaly detection data"""
+        try:
+            self.dns_sniffer.anomaly_detector.clear_data()
+            self.anomaly_text.delete(1.0, tk.END)
+            self.anomaly_text.insert(tk.END, "Anomaly data cleared.\n\nStart analysis to begin monitoring for anomalies.")
+            self.update_anomaly_stats()
+            messagebox.showinfo("Cleared", "Anomaly detection data has been cleared.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to clear anomaly data: {e}")
+
+    def update_anomaly_stats(self):
+        """Update the anomaly detection statistics display"""
+        try:
+            # Get anomaly statistics
+            anomaly_stats = self.dns_sniffer.get_anomaly_stats()
+
+            # Update statistics labels
+            total_alerts = anomaly_stats.get('total_alerts', 0)
+            alerts_per_hour = anomaly_stats.get('alerts_per_hour', 0)
+            training_status = "Trained" if anomaly_stats.get('is_trained', False) else "Not Trained"
+            baseline_samples = anomaly_stats.get('baseline_samples', 0)
+
+            self.anomaly_total_alerts_label.config(text=f"Total Alerts: {total_alerts}")
+            self.anomaly_alerts_per_hour_label.config(text=f"Alerts/Hour: {alerts_per_hour:.1f}")
+            self.anomaly_training_status_label.config(text=f"Training Status: {training_status}")
+            self.anomaly_baseline_samples_label.config(text=f"Baseline Samples: {baseline_samples}")
+
+            # Update alerts text
+            self.anomaly_text.delete(1.0, tk.END)
+
+            anomaly_info = f"""🚨 Anomaly Detection Monitor
+{'=' * 40}
+
+📊 Detection Statistics:
+• Total Alerts: {total_alerts}
+• Alerts per Hour: {alerts_per_hour:.1f}
+• Training Status: {training_status}
+• Baseline Samples: {baseline_samples}
+
+🔍 Recent Alerts:
+"""
+
+            # Add recent alerts
+            recent_alerts = anomaly_stats.get('recent_alerts', [])
+            if recent_alerts:
+                for alert in recent_alerts[-15:]:  # Show last 15 alerts
+                    timestamp = time.strftime('%H:%M:%S', time.localtime(alert.get('timestamp', 0)))
+                    domain = alert.get('domain', 'Unknown')
+                    score = alert.get('anomaly_score', 0)
+                    message = alert.get('alert_message', 'Unknown anomaly')
+
+                    anomaly_info += f"\n[{timestamp}] {domain}\n"
+                    anomaly_info += f"  Score: {score:.2f} | {message}\n"
+            else:
+                anomaly_info += "\n• No recent alerts\n"
+
+            anomaly_info += "\n💡 Tips:\n"
+            anomaly_info += "• Update baseline after initial training period\n"
+            anomaly_info += "• High anomaly scores indicate unusual behavior\n"
+            anomaly_info += "• Clear data periodically to reset monitoring\n"
+
+            self.anomaly_text.insert(tk.END, anomaly_info)
+
+        except Exception as e:
+            self.anomaly_text.delete(1.0, tk.END)
+            self.anomaly_text.insert(tk.END, f"Error loading anomaly stats: {e}")

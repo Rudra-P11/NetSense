@@ -203,9 +203,26 @@ class WebsiteClassifier:
             print(f"Error loading ML model: {e}")
             self.is_trained = False
 
+    def get_user_label(self, domain: str) -> Optional[str]:
+        """
+        Get user-provided label for a domain.
+
+        Args:
+            domain: The domain to check
+
+        Returns:
+            User label category or None if not found
+        """
+        domain = domain.lower().strip()
+        for sample in self.data_collector.training_samples:
+            if sample['domain'] == domain:
+                return sample['category']
+        return None
+
     def classify_website_ml(self, domain: str, access_history: Optional[Dict] = None) -> Tuple[str, float]:
         """
         Classify website using ML model with fallback to rule-based classification.
+        User labels have highest priority.
 
         Args:
             domain: The domain to classify
@@ -220,7 +237,12 @@ class WebsiteClassifier:
         if self._is_common_repeating_site(domain):
             return 'neutral', 0.9  # High confidence for filtered sites
 
-        # Try ML classification first if model is available
+        # Check user labels first (highest priority)
+        user_label = self.get_user_label(domain)
+        if user_label:
+            return user_label, 1.0  # High confidence for user labels
+
+        # Try ML classification if model is available
         if self.is_trained and self.ml_model is not None:
             try:
                 features = self.data_collector.extract_domain_features(domain, access_history)
@@ -252,6 +274,7 @@ class WebsiteClassifier:
 
         # Rule-based classification as fallback
         return self.classify_website(domain)
+
 
     def _is_common_repeating_site(self, domain: str) -> bool:
         """Check if domain is a common repeating infrastructure site"""
