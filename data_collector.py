@@ -119,6 +119,10 @@ class DataCollector:
             Dictionary of features for ML model
         """
         domain = domain.lower().strip()
+        
+        # Remove port if present (e.g., "example.com:80" -> "example.com")
+        if ':' in domain:
+            domain = domain.split(':')[0].strip()
 
         # Check cache first
         if domain in self.feature_cache:

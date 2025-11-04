@@ -8,6 +8,9 @@ from auto_trainer import TrainingScheduler
 import sys
 import os
 import warnings
+
+# Suppress TensorFlow warnings and oneDNN performance notices
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 warnings.filterwarnings('ignore')
 
 def check_admin_privileges():

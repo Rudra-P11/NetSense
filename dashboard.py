@@ -855,10 +855,32 @@ class NetworkAnalyzerDashboard:
                 else:
                     status = "🔄 Collecting data..."
                 
-                # Get anomaly count
-                if hasattr(detector, 'get_anomalies'):
-                    anomalies = detector.get_anomalies()
-                    anomaly_count = len(anomalies) if anomalies else 0
+                # Get recent alerts
+                if hasattr(detector, 'get_recent_alerts'):
+                    alerts = detector.get_recent_alerts()
+                    anomaly_count = len(alerts)
+                    
+                    # Update anomaly text display
+                    self.anomaly_text.config(state=tk.NORMAL)
+                    self.anomaly_text.delete(1.0, tk.END)
+                    
+                    if alerts:
+                        # Display alerts in reverse chronological order (newest first)
+                        for alert in reversed(alerts):
+                            timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(alert.get('timestamp', 0)))
+                            domain = alert.get('domain', 'Unknown')
+                            message = alert.get('alert_message', 'Unknown anomaly')
+                            score = alert.get('anomaly_score', 0.0)
+                            
+                            alert_line = f"🚨 [{timestamp}] {domain}\n"
+                            alert_line += f"   💬 {message}\n"
+                            alert_line += f"   📊 Score: {score:.2f}\n\n"
+                            
+                            self.anomaly_text.insert(tk.END, alert_line)
+                    else:
+                        self.anomaly_text.insert(tk.END, "✅ No anomalies detected yet.\n\nAnomalies will appear here as they are detected.")
+                    
+                    self.anomaly_text.config(state=tk.DISABLED)
                 else:
                     anomaly_count = 0
                 

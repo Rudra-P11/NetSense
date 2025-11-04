@@ -246,6 +246,11 @@ class AnomalyDetector:
                 'baseline_samples': len(self.feature_history),
                 'recent_alerts': recent_alerts
             }
+    
+    def get_recent_alerts(self) -> List[Dict]:
+        """Get list of recent anomaly alerts"""
+        with self.lock:
+            return list(self.anomaly_alerts)[-20:]  # Return last 20 alerts
 
     def clear_data(self):
         """Clear all stored data and reset the model"""
