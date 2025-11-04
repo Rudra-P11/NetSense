@@ -1,0 +1,11 @@
+scapy
+matplotlib
+pandas
+numpy
+psutil
+scikit-learn>=1.3.0
+joblib>=1.3.0
+nltk>=3.8.0
+statsmodels>=0.14.0
+seaborn>=0.12.0
+schedule>=1.2.0

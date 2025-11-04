@@ -8,12 +8,16 @@ import threading
 from typing import Dict, Set
 import socket
 from anomaly_detector import AnomalyDetector
+from content_analyzer import ContentAnalyzer
+
 
 
 class DNSSniffer:
-    def __init__(self, classifier):
+    def __init__(self, classifier, productivity_predictor=None):
         self.classifier = classifier
+        self.productivity_predictor = productivity_predictor
         self.anomaly_detector = AnomalyDetector()
+        self.content_analyzer = ContentAnalyzer(enable_deep_analysis=False)  # Start with deep analysis disabled
         self.domain_activity = defaultdict(lambda: {'first_seen': 0, 'last_seen': 0, 'packet_count': 0})
         self.active_domains = set()
         self.domain_times = defaultdict(float)
@@ -24,6 +28,7 @@ class DNSSniffer:
         self.anomaly_alerts = deque(maxlen=100)
         self.dns_responses = {}  # Track DNS responses to map IPs to domains
         self.ssl_hostnames = {}  # Track SSL hostnames
+
 
         
     def start_sniffing(self):
@@ -306,8 +311,16 @@ class DNSSniffer:
                 self.anomaly_alerts.append(alert)
                 print(f"ANOMALY DETECTED: {domain} - {message}")
 
+            # Content analysis (if enabled and consented)
+            if packet.haslayer(Raw):
+                content_insights = self.content_analyzer.analyze_payload(domain, bytes(packet[Raw]), protocol)
+                if content_insights:
+                    # Store content insights if needed
+                    pass
+
             # Print for debugging
             print(f"Captured: {domain} via {protocol}")
+
 
     
     def get_domain_statistics(self) -> Dict:
@@ -342,7 +355,24 @@ class DNSSniffer:
     def get_productivity_analysis(self):
         """Get productivity analysis based on domain times"""
         stats = self.get_domain_statistics()
-        return self.classifier.get_productivity_analysis(stats['domain_times'])
+        productivity_analysis = self.classifier.get_productivity_analysis(stats['domain_times'])
+
+        # Add productivity data to predictor if available
+        if self.productivity_predictor:
+            productivity_score = productivity_analysis.get('productivity_score', 0)
+            if productivity_score > 0:  # Only add meaningful data
+                # Create context with domain times
+                context = {
+                    'domain_times': stats['domain_times'],
+                    'total_domains': stats['total_domains'],
+                    'total_packets': stats['total_packets']
+                }
+                self.productivity_predictor.add_productivity_data(
+                    productivity_score=productivity_score,
+                    context=context
+                )
+
+        return productivity_analysis
     
     def get_anomaly_stats(self) -> Dict:
         """Get anomaly detection statistics"""
@@ -363,6 +393,32 @@ class DNSSniffer:
         """Update the anomaly detection baseline"""
         return self.anomaly_detector.update_baseline()
 
+    def enable_deep_analysis(self, enabled: bool):
+        """Enable or disable deep content analysis"""
+        self.content_analyzer.enable_deep_analysis = enabled
+
+    def add_content_consent(self, domain: str):
+        """Add consent for content analysis of a domain"""
+        self.content_analyzer.add_consent(domain)
+
+    def remove_content_consent(self, domain: str):
+        """Remove consent for content analysis of a domain"""
+        self.content_analyzer.remove_consent(domain)
+
+    def get_content_insights(self, domain: str = None):
+        """Get content analysis insights"""
+        if domain:
+            return self.content_analyzer.get_domain_insights(domain)
+        else:
+            return self.content_analyzer.get_content_statistics()
+
+    def clear_content_data(self, domain: str = None):
+        """Clear content analysis data"""
+        if domain:
+            self.content_analyzer.clear_domain_data(domain)
+        else:
+            self.content_analyzer.clear_all_data()
+
     def clear_statistics(self):
         """Clear all collected statistics"""
         with self.lock:
@@ -373,3 +429,113 @@ class DNSSniffer:
             self.anomaly_alerts.clear()
             self.dns_responses.clear()
             self.anomaly_detector.clear_data()
+            self.content_analyzer.clear_all_data()
+
+    def get_content_stats(self) -> Dict:
+        """Get content analysis statistics"""
+        return self.content_analyzer.get_content_statistics()
+
+    def analyze_domain_content(self, domain: str, deep_analysis: bool = False) -> Dict:
+        """Analyze content for a specific domain"""
+        try:
+            if deep_analysis:
+                self.enable_deep_analysis(True)
+                self.add_content_consent(domain)
+
+            # Get existing insights for the domain
+            insights = self.get_content_insights(domain)
+
+            if insights and insights.get('sample_count', 0) > 0:
+                # Format for dashboard display
+                sentiment = insights.get('average_sentiment', {})
+                compound_score = sentiment.get('compound', 0)
+
+                # Determine overall sentiment
+                if compound_score >= 0.05:
+                    overall_sentiment = 'positive'
+                elif compound_score <= -0.05:
+                    overall_sentiment = 'negative'
+                else:
+                    overall_sentiment = 'neutral'
+
+                # Calculate confidence based on sample count
+                sample_count = insights.get('sample_count', 0)
+                confidence = min(sample_count / 10.0, 1.0)  # Scale confidence with sample count
+
+                # Get sample content (up to 3 samples, truncated to 200 chars each)
+                text_samples = insights.get('text_samples', [])[:3]
+                sample_content = []
+                for sample in text_samples:
+                    if len(sample) > 200:
+                        sample_content.append(sample[:200] + "...")
+                    else:
+                        sample_content.append(sample)
+
+                # Get top keywords
+                top_keywords = [kw for kw, _ in insights.get('top_keywords', [])]
+
+                # Get content categories
+                top_categories = [cat for cat, _ in insights.get('top_categories', [])]
+
+                # Enhanced summary with detailed info
+                summary_parts = [
+                    f"Analyzed {sample_count} content samples.",
+                    f"Overall sentiment: {overall_sentiment.title()} (confidence: {confidence:.1f})."
+                ]
+
+                if top_keywords:
+                    summary_parts.append(f"Top keywords: {', '.join(top_keywords[:5])}.")
+
+                if top_categories:
+                    summary_parts.append(f"Content categories: {', '.join(top_categories[:3])}.")
+
+                # Add sentiment trend if available
+                trend = insights.get('sentiment_trend', 'unknown')
+                if trend != 'insufficient_data':
+                    summary_parts.append(f"Sentiment trend: {trend.title()}.")
+
+                summary = " ".join(summary_parts)
+
+                return {
+                    'domain': domain,
+                    'sentiment': overall_sentiment,
+                    'confidence': confidence,
+                    'keywords': top_keywords,
+                    'categories': top_categories,
+                    'summary': summary,
+                    'timestamp': insights.get('last_analyzed', time.time()),
+                    'sample_content': sample_content,
+                    'sample_count': sample_count,
+                    'sentiment_trend': trend,
+                    'total_packets_analyzed': insights.get('total_packets_analyzed', 0)
+                }
+            else:
+                # Return default result when no data is available
+                return {
+                    'domain': domain,
+                    'sentiment': 'unknown',
+                    'confidence': 0.0,
+                    'keywords': [],
+                    'categories': [],
+                    'summary': f"No content data available for {domain}. Enable deep analysis and visit the domain to collect data.",
+                    'timestamp': time.time(),
+                    'sample_content': [],
+                    'sample_count': 0,
+                    'sentiment_trend': 'unknown',
+                    'total_packets_analyzed': 0
+                }
+        except Exception as e:
+            # Return error result for dashboard to handle gracefully
+            return {
+                'domain': domain,
+                'sentiment': 'error',
+                'confidence': 0.0,
+                'keywords': [],
+                'categories': [],
+                'summary': f"Error analyzing content for {domain}: {str(e)}",
+                'timestamp': time.time(),
+                'sample_content': [],
+                'sample_count': 0,
+                'sentiment_trend': 'unknown',
+                'total_packets_analyzed': 0
+            }

@@ -1,0 +1,41 @@
+{
+  "website_classifier": {
+    "filename": "website_classifier_1762238400_7a3bbbd1.pkl",
+    "filepath": "ml_models\\website_classifier_1762238400_7a3bbbd1.pkl",
+    "created_at": 1762238400,
+    "model_hash": "7a3bbbd1",
+    "metadata": {
+      "training_samples": 11,
+      "features": [
+        "domain_length",
+        "has_subdomain",
+        "tld",
+        "has_numbers",
+        "has_hyphen",
+        "productive_keywords",
+        "unproductive_keywords",
+        "neutral_keywords",
+        "total_access_time",
+        "access_frequency",
+        "avg_session_length",
+        "peak_hour",
+        "weekday_score",
+        "is_educational",
+        "is_government",
+        "is_social",
+        "is_video"
+      ],
+      "training_date": 1762238400.2851777,
+      "model_type": "RandomForestClassifier"
+    }
+  },
+  "feature_scaler": {
+    "filename": "feature_scaler_1762238400_63f0f8af.pkl",
+    "filepath": "ml_models\\feature_scaler_1762238400_63f0f8af.pkl",
+    "created_at": 1762238400,
+    "model_hash": "63f0f8af",
+    "metadata": {
+      "type": "StandardScaler"
+    }
+  }
+}

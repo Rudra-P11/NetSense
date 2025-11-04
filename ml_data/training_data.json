@@ -61,5 +61,19 @@
     "confidence": 1.0,
     "timestamp": 1761329206.7138698,
     "context": {}
+  },
+  {
+    "domain": "www.amazon.in",
+    "category": "productive",
+    "confidence": 1.0,
+    "timestamp": 1762238341.2318697,
+    "context": {}
+  },
+  {
+    "domain": "amazon.com",
+    "category": "productive",
+    "confidence": 1.0,
+    "timestamp": 1762238393.9153397,
+    "context": {}
   }
 ]
